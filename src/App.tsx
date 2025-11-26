@@ -1,11 +1,7 @@
-/**
- * Main App Component
- *
- * This is the root component that renders the Custom CAPTCHA component.
- */
+import { CustomCaptcha } from './components/CustomCaptcha.component';
 
 function App() {
-  return <div>Main App Component</div>;
+  return <CustomCaptcha />;
 }
 
 export default App;
