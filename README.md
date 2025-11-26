@@ -1,4 +1,4 @@
-# Custom CAPTCHA - MeldXC
+# Custom CAPTCHA
 
 A custom CAPTCHA implementation built with React 19, TypeScript, Vite, and Tailwind CSS. This project implements a multi-step visual CAPTCHA system that uses camera-based verification with shape recognition.
 
