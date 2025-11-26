@@ -4,7 +4,11 @@ import type {
   CapturedImage,
   WatermarkSector,
 } from '../interfaces';
-import { INITIAL_TOLERANCE } from '../constants';
+import {
+  INITIAL_TOLERANCE,
+  MIN_TOLERANCE,
+  TOLERANCE_DECREASE,
+} from '../constants';
 import type { ColorTint, ShapeType } from '../types';
 import { randomDelay } from '../utils';
 
@@ -200,10 +204,46 @@ export const useCustomCaptcha = () => {
     });
   }, []);
 
+  const handleReset = useCallback(() => {
+    setCaptchaState((prev) => ({
+      ...prev,
+      step: 1,
+      capturedImage: null,
+      gridSize: 5,
+      watermarks: [],
+      targetShape: 'triangle',
+      targetColor: null,
+      selectedSectors: new Set(),
+      attempts: 0,
+      maxAttempts: 3,
+      tolerance: INITIAL_TOLERANCE,
+      passed: null,
+    }));
+  }, []);
+
+  const handleRetry = useCallback(() => {
+    const newTolerance = Math.max(
+      INITIAL_TOLERANCE - captchaState.attempts * TOLERANCE_DECREASE,
+      MIN_TOLERANCE
+    );
+
+    setCaptchaState((prev) => ({
+      ...prev,
+      step: 1,
+      capturedImage: null,
+      watermarks: [],
+      selectedSectors: new Set(),
+      tolerance: newTolerance,
+      passed: null,
+    }));
+  }, [captchaState.attempts]);
+
   return {
     captchaState,
     handleImageCapture,
     handleSectorToggle,
     handleValidation,
+    handleReset,
+    handleRetry,
   };
 };

@@ -10,6 +10,8 @@ export const CustomCaptcha: React.FC = () => {
     handleImageCapture,
     handleSectorToggle,
     handleValidation,
+    handleReset,
+    handleRetry,
   } = useCustomCaptcha();
 
   // Render appropriate step component
@@ -33,7 +35,17 @@ export const CustomCaptcha: React.FC = () => {
   }
 
   if (captchaState.step === 3) {
-    return <CaptchaResult />;
+    return (
+      <CaptchaResult
+        passed={captchaState.passed!}
+        attempts={captchaState.attempts}
+        maxAttempts={captchaState.maxAttempts}
+        tolerance={captchaState.tolerance}
+        onRetry={handleRetry}
+        onReset={handleReset}
+        canRetry={captchaState.attempts < captchaState.maxAttempts}
+      />
+    );
   }
 
   return null;
