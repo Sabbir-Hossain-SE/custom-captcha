@@ -10,6 +10,8 @@ export const useCaptchaStepOne = (
   const streamRef = useRef<MediaStream | null>(null);
   const animationFrameRef = useRef<number | null>(null);
   const isInitializingRef = useRef(true);
+  const isInitializedRef = useRef(false);
+  const squarePositionRef = useRef({ x: 0, y: 0, size: 200 });
   const [squarePosition, setSquarePosition] = useState<{
     x: number;
     y: number;
@@ -23,6 +25,12 @@ export const useCaptchaStepOne = (
   const [error, setError] = useState<string | null>(null);
   const [isInitializing, setIsInitializing] = useState(true);
 
+  // Memoize onCapture to prevent unnecessary re-renders
+  const onCaptureRef = useRef(onCapture);
+  useEffect(() => {
+    onCaptureRef.current = onCapture;
+  }, [onCapture]);
+
   /**
    * Initialize camera stream
    */
@@ -30,32 +38,65 @@ export const useCaptchaStepOne = (
     let timeoutId: number | null = null;
     let pollInterval: number | null = null;
     let safetyTimeoutId: number | null = null;
-    let isInitialized = false;
-    let safetyTriggered = false;
+    let cleanupCalled = false;
 
-    // GUARANTEED safety timeout - always ends loading after 2 seconds
-    safetyTimeoutId = window.setTimeout(() => {
-      if (isInitializingRef.current && !safetyTriggered) {
-        safetyTriggered = true;
-        console.warn('Safety timeout: Forcing initialization to complete');
-        setIsInitializing(false);
-        isInitializingRef.current = false;
-        isInitialized = true;
+    const cleanup = () => {
+      if (cleanupCalled) return;
+      cleanupCalled = true;
 
-        // Initialize with fallback dimensions
-        const initialPos = getRandomPosition(640, 480, squarePosition.size);
-        setSquarePosition({
-          ...initialPos,
-          size: Math.min(200, Math.min(640, 480) * 0.4),
-        });
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+        timeoutId = null;
       }
-    }, 2000);
+      if (pollInterval) {
+        clearInterval(pollInterval);
+        pollInterval = null;
+      }
+      if (safetyTimeoutId) {
+        clearTimeout(safetyTimeoutId);
+        safetyTimeoutId = null;
+      }
+    };
+
+    const initializeVideo = (forceFallback = false) => {
+      if (isInitializedRef.current) return;
+
+      const video = videoRef.current;
+      if (!video && !forceFallback) return;
+
+      let videoWidth = 640;
+      let videoHeight = 480;
+
+      if (video && !forceFallback) {
+        const actualWidth = video.videoWidth;
+        const actualHeight = video.videoHeight;
+
+        if (actualWidth > 0 && actualHeight > 0) {
+          videoWidth = actualWidth;
+          videoHeight = actualHeight;
+        }
+      }
+
+      const size = Math.min(200, Math.min(videoWidth, videoHeight) * 0.4);
+      const initialPos = getRandomPosition(videoWidth, videoHeight, size);
+
+      const newPosition = {
+        ...initialPos,
+        size,
+      };
+
+      // Batch state updates
+      squarePositionRef.current = newPosition;
+      setSquarePosition(newPosition);
+      setIsInitializing(false);
+      isInitializingRef.current = false;
+      isInitializedRef.current = true;
+
+      cleanup();
+    };
 
     const initializeCamera = async () => {
-      setIsInitializing(true);
-      isInitializingRef.current = true;
       try {
-        // Request front-facing camera (selfie camera)
         const stream = await navigator.mediaDevices.getUserMedia({
           video: {
             facingMode: 'user',
@@ -64,132 +105,48 @@ export const useCaptchaStepOne = (
           },
         });
 
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          streamRef.current = stream;
-
-          // Function to initialize video dimensions
-          const initializeVideo = (forceFallback = false) => {
-            if (isInitialized) return;
-
-            if (!videoRef.current) {
-              // No video element, use fallback
-              const initialPos = getRandomPosition(
-                640,
-                480,
-                squarePosition.size
-              );
-              setSquarePosition({
-                ...initialPos,
-                size: Math.min(200, Math.min(640, 480) * 0.4),
-              });
-              setIsInitializing(false);
-              isInitialized = true;
-              return;
-            }
-
-            // Safari sometimes needs the video to play first
-            if (videoRef.current.paused) {
-              videoRef.current.play().catch((err) => {
-                console.warn('Video play error:', err);
-              });
-            }
-
-            let videoWidth = videoRef.current.videoWidth;
-            let videoHeight = videoRef.current.videoHeight;
-
-            // Use fallback dimensions if needed or forced
-            if (forceFallback || videoWidth === 0 || videoHeight === 0) {
-              console.warn(
-                'Using fallback dimensions. Actual:',
-                videoWidth,
-                'x',
-                videoHeight
-              );
-              videoWidth = 640;
-              videoHeight = 480;
-            }
-
-            // Always proceed with initialization
-            const initialPos = getRandomPosition(
-              videoWidth,
-              videoHeight,
-              squarePosition.size
-            );
-            setSquarePosition({
-              ...initialPos,
-              size: Math.min(200, Math.min(videoWidth, videoHeight) * 0.4),
-            });
-
-            setIsInitializing(false);
-            isInitializingRef.current = false;
-            isInitialized = true;
-
-            // Clean up timers
-            if (timeoutId) {
-              clearTimeout(timeoutId);
-              timeoutId = null;
-            }
-            if (pollInterval) {
-              clearInterval(pollInterval);
-              pollInterval = null;
-            }
-            if (safetyTimeoutId) {
-              clearTimeout(safetyTimeoutId);
-              safetyTimeoutId = null;
-            }
-          };
-
-          // Safari-specific: Use multiple event listeners
-          videoRef.current.onloadedmetadata = () => {
-            console.log('onloadedmetadata fired');
-            initializeVideo();
-          };
-          videoRef.current.oncanplay = () => {
-            console.log('oncanplay fired');
-            initializeVideo();
-          };
-          videoRef.current.onloadeddata = () => {
-            console.log('onloadeddata fired');
-            initializeVideo();
-          };
-          videoRef.current.onplaying = () => {
-            console.log('onplaying fired');
-            initializeVideo();
-          };
-
-          // Force play for Safari
-          videoRef.current.play().catch((err) => {
-            console.warn('Initial video play error:', err);
-          });
-
-          // Polling mechanism - check every 100ms
-          pollInterval = window.setInterval(() => {
-            if (videoRef.current && !isInitialized) {
-              const width = videoRef.current.videoWidth;
-              const height = videoRef.current.videoHeight;
-              console.log('Polling check:', width, 'x', height);
-              if (width > 0 && height > 0) {
-                initializeVideo();
-              } else if (!isInitialized) {
-                // After 1 second of polling, just proceed with fallback
-                initializeVideo(true);
-              }
-            }
-          }, 100);
-
-          // Quick timeout - proceed after 800ms
-          timeoutId = window.setTimeout(() => {
-            if (!isInitialized) {
-              console.warn('Quick timeout - proceeding with fallback');
-              initializeVideo(true);
-            }
-          }, 800);
-        } else {
-          // No video ref, proceed immediately with fallback
-          setIsInitializing(false);
-          isInitialized = true;
+        const video = videoRef.current;
+        if (!video) {
+          initializeVideo(true);
+          return;
         }
+
+        video.srcObject = stream;
+        streamRef.current = stream;
+
+        // Single handler for all video events
+        const handleVideoReady = () => {
+          if (!isInitializedRef.current) {
+            initializeVideo();
+          }
+        };
+
+        video.onloadedmetadata = handleVideoReady;
+        video.oncanplay = handleVideoReady;
+        video.onloadeddata = handleVideoReady;
+        video.onplaying = handleVideoReady;
+
+        video.play().catch((err) => {
+          console.warn('Video play error:', err);
+        });
+
+        // Polling mechanism - check every 100ms
+        pollInterval = window.setInterval(() => {
+          if (video && !isInitializedRef.current) {
+            const width = video.videoWidth;
+            const height = video.videoHeight;
+            if (width > 0 && height > 0) {
+              initializeVideo();
+            }
+          }
+        }, 100);
+
+        // Quick timeout - proceed after 800ms
+        timeoutId = window.setTimeout(() => {
+          if (!isInitializedRef.current) {
+            initializeVideo(true);
+          }
+        }, 800);
       } catch (err) {
         console.error('Error accessing camera:', err);
         const errorMessage =
@@ -197,7 +154,6 @@ export const useCaptchaStepOne = (
             ? err.message
             : 'Unable to access camera. Please ensure camera permissions are granted.';
 
-        // Safari-specific error messages
         let userMessage = 'Unable to access camera. ';
         if (
           errorMessage.includes('NotAllowedError') ||
@@ -222,31 +178,32 @@ export const useCaptchaStepOne = (
 
         setError(userMessage);
         setIsInitializing(false);
-        isInitialized = true;
+        isInitializedRef.current = true;
+        cleanup();
       }
     };
+
+    // GUARANTEED safety timeout - always ends loading after 2 seconds
+    safetyTimeoutId = window.setTimeout(() => {
+      if (isInitializingRef.current && !isInitializedRef.current) {
+        initializeVideo(true);
+      }
+    }, 2000);
 
     initializeCamera();
 
     // Cleanup on unmount
     return () => {
-      if (timeoutId) {
-        clearTimeout(timeoutId);
-      }
-      if (pollInterval) {
-        clearInterval(pollInterval);
-      }
-      if (safetyTimeoutId) {
-        clearTimeout(safetyTimeoutId);
-      }
+      cleanup();
       if (streamRef.current) {
         streamRef.current.getTracks().forEach((track) => track.stop());
+        streamRef.current = null;
       }
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = null;
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   /**
@@ -254,12 +211,20 @@ export const useCaptchaStepOne = (
    * This makes it harder for automated tools to predict the position
    */
   useEffect(() => {
-    if (!videoRef.current || isCapturing) return;
+    if (!videoRef.current || isCapturing || isInitializing) return;
 
     let lastUpdateTime = Date.now();
-    const updateInterval = 500 + Math.random() * 500; // Random interval between 500-1000ms
+    let updateInterval = 500 + Math.random() * 500; // Random interval between 500-1000ms
+    let animationId: number | null = null;
 
     const updatePosition = () => {
+      if (isCapturing || !videoRef.current) {
+        if (animationId) {
+          cancelAnimationFrame(animationId);
+        }
+        return;
+      }
+
       const now = Date.now();
       const video = videoRef.current;
       if (!video) return;
@@ -267,44 +232,62 @@ export const useCaptchaStepOne = (
       if (now - lastUpdateTime >= updateInterval) {
         const videoWidth = video.videoWidth || 640;
         const videoHeight = video.videoHeight || 480;
+        const currentSize = squarePositionRef.current.size;
 
-        setSquarePosition((prev) => {
-          const newPos = getRandomPosition(videoWidth, videoHeight, prev.size);
-          return {
-            ...prev,
-            ...newPos,
-          };
-        });
+        const newPos = getRandomPosition(videoWidth, videoHeight, currentSize);
+        const newPosition = {
+          ...squarePositionRef.current,
+          ...newPos,
+        };
+
+        // Only update state if position actually changed
+        if (
+          newPosition.x !== squarePositionRef.current.x ||
+          newPosition.y !== squarePositionRef.current.y
+        ) {
+          squarePositionRef.current = newPosition;
+          setSquarePosition(newPosition);
+        }
 
         lastUpdateTime = now;
+        updateInterval = 500 + Math.random() * 500; // New random interval
       }
 
-      if (!isCapturing) {
-        animationFrameRef.current = requestAnimationFrame(updatePosition);
-      }
+      animationId = requestAnimationFrame(updatePosition);
+      animationFrameRef.current = animationId;
     };
 
-    animationFrameRef.current = requestAnimationFrame(updatePosition);
+    animationId = requestAnimationFrame(updatePosition);
+    animationFrameRef.current = animationId;
 
     return () => {
-      if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current);
+      if (animationId) {
+        cancelAnimationFrame(animationId);
+      }
+      if (animationFrameRef.current === animationId) {
+        animationFrameRef.current = null;
       }
     };
-  }, [isCapturing]);
+  }, [isCapturing, isInitializing]);
 
   /**
    * Capture current frame and square position
    */
   const handleContinue = useCallback(() => {
-    if (!videoRef.current || !canvasRef.current || isCapturing) return;
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+
+    if (!video || !canvas || isCapturing) return;
 
     setIsCapturing(true);
 
-    const video = videoRef.current;
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
+    // Cancel any ongoing animation
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    }
 
+    const ctx = canvas.getContext('2d', { willReadFrequently: false });
     if (!ctx) {
       setError('Failed to get canvas context');
       setIsCapturing(false);
@@ -312,8 +295,10 @@ export const useCaptchaStepOne = (
     }
 
     // Set canvas size to match video
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+    const videoWidth = video.videoWidth || 640;
+    const videoHeight = video.videoHeight || 480;
+    canvas.width = videoWidth;
+    canvas.height = videoHeight;
 
     // Draw current video frame to canvas
     ctx.drawImage(video, 0, 0);
@@ -321,13 +306,16 @@ export const useCaptchaStepOne = (
     // Convert to base64 image
     const imageData = canvas.toDataURL('image/png');
 
+    // Use ref value to avoid stale closure
+    const currentPosition = squarePositionRef.current;
+
     // Create captured image object
     const capturedImage: CapturedImage = {
       imageData,
       squarePosition: {
-        x: squarePosition.x,
-        y: squarePosition.y,
-        size: squarePosition.size,
+        x: currentPosition.x,
+        y: currentPosition.y,
+        size: currentPosition.size,
       },
       timestamp: Date.now(),
     };
@@ -335,59 +323,20 @@ export const useCaptchaStepOne = (
     // Stop video stream
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
     }
 
-    // Pass to parent component
-    onCapture(capturedImage);
-  }, [videoRef, canvasRef, squarePosition, isCapturing, onCapture]);
-
-  const onLoadedMetadataHandler = () => {
-    // Ensure initialization completes (Safari fallback)
-    if (isInitializing && videoRef.current) {
-      const videoWidth = videoRef.current.videoWidth || 640;
-      const videoHeight = videoRef.current.videoHeight || 480;
-      if (videoWidth > 0 && videoHeight > 0) {
-        const initialPos = getRandomPosition(
-          videoWidth,
-          videoHeight,
-          squarePosition.size
-        );
-        setSquarePosition({
-          ...initialPos,
-          size: Math.min(200, Math.min(videoWidth, videoHeight) * 0.4),
-        });
-        setIsInitializing(false);
-      }
-    }
-  };
-
-  const onCanPlayHandler = () => {
-    // Safari sometimes fires this instead of onLoadedMetadata
-    if (isInitializing && videoRef.current) {
-      const videoWidth = videoRef.current.videoWidth || 640;
-      const videoHeight = videoRef.current.videoHeight || 480;
-      if (videoWidth > 0 && videoHeight > 0) {
-        setIsInitializing(false);
-      }
-    }
-  };
+    // Pass to parent component using ref to avoid dependency
+    onCaptureRef.current(capturedImage);
+  }, [isCapturing]);
 
   return {
     videoRef,
     canvasRef,
-    streamRef,
-    animationFrameRef,
-    isInitializingRef,
     squarePosition,
     isCapturing,
     error,
     isInitializing,
     handleContinue,
-    setSquarePosition,
-    setIsCapturing,
-    setError,
-    setIsInitializing,
-    onLoadedMetadataHandler,
-    onCanPlayHandler,
   };
 };

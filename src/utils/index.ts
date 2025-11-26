@@ -34,3 +34,30 @@ export const getRandomPosition = (
     y: Math.max(0, Math.min(y, maxY)),
   };
 };
+
+/**
+ * Validate timing between actions to prevent rapid automation
+ */
+export class TimingValidator {
+  private lastActionTime: number = 0;
+  private minDelay: number = 100; // Minimum 100ms between actions
+
+  /**
+   * Check if enough time has passed since last action
+   */
+  canProceed(): boolean {
+    const now = Date.now();
+    if (now - this.lastActionTime < this.minDelay) {
+      return false;
+    }
+    this.lastActionTime = now;
+    return true;
+  }
+
+  /**
+   * Reset timing validator
+   */
+  reset(): void {
+    this.lastActionTime = 0;
+  }
+}
