@@ -1,2 +1,2 @@
 # custom-captcha
-CAPTCHA with video ctreaming.
+CAPTCHA with video streaming.
