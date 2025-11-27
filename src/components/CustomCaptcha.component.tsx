@@ -30,6 +30,7 @@ export const CustomCaptcha: React.FC = () => {
         onSectorToggle={handleSectorToggle}
         onValidate={handleValidation}
         gridSize={captchaState.gridSize}
+        sectorKeyMapping={captchaState.sectorKeyMapping}
       />
     );
   }

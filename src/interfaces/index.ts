@@ -21,6 +21,8 @@ export interface CaptchaState {
   targetShape: ShapeType;
   targetColor: ColorTint | null;
   selectedSectors: Set<string>;
+  sectorKeyMapping: Map<string, string> | null; // Maps simple keys (row-col) to obfuscated keys
+  obfuscationSeed: number | null; // Seed used for obfuscation
   attempts: number;
   maxAttempts: number;
   tolerance: number; // Percentage of correct selections required

@@ -13,6 +13,7 @@ interface CaptchaStepTwoProps {
   onSectorToggle: (row: number, col: number) => void;
   onValidate: () => void;
   gridSize: number;
+  sectorKeyMapping: Map<string, string> | null;
 }
 
 export const CaptchaStepTwo: React.FC<CaptchaStepTwoProps> = memo(
@@ -25,6 +26,7 @@ export const CaptchaStepTwo: React.FC<CaptchaStepTwoProps> = memo(
     onSectorToggle,
     onValidate,
     gridSize,
+    sectorKeyMapping,
   }) => {
     const {
       instructionText,
@@ -34,13 +36,16 @@ export const CaptchaStepTwo: React.FC<CaptchaStepTwoProps> = memo(
       imageDimensions,
       imgRef,
       handleImageLoad,
+      handleSectorToggleWithProtection,
     } = useCaptchaStepTwo(
       capturedImage,
       gridSize,
       targetShape,
       targetColor,
       selectedSectors,
-      watermarks
+      watermarks,
+      onSectorToggle,
+      sectorKeyMapping
     );
 
     // Memoize grid lines to avoid recreating on every render
@@ -123,7 +128,7 @@ export const CaptchaStepTwo: React.FC<CaptchaStepTwoProps> = memo(
                   ? 'rgba(59, 130, 246, 0.3)'
                   : 'transparent',
               }}
-              onClick={() => onSectorToggle(row, col)}
+              onClick={(e) => handleSectorToggleWithProtection(row, col, e)}
               title={`Sector ${row + 1},${col + 1}`}
             >
               {/* Render watermark shape if present */}

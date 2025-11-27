@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { TimingValidator } from '../utils';
+import { InteractionTracker, TimingValidator } from '../utils';
 import type { CapturedImage, WatermarkSector } from '../interfaces';
 import type { ColorTint, ShapeType } from '../types';
 
@@ -9,14 +9,17 @@ export const useCaptchaStepTwo = (
   targetShape: ShapeType,
   targetColor: ColorTint | null,
   selectedSectors: Set<string>,
-  watermarks: WatermarkSector[]
+  watermarks: WatermarkSector[],
+  onSectorToggle: (row: number, col: number) => void,
+  sectorKeyMapping: Map<string, string> | null = null
 ) => {
+  const interactionTrackerRef = useRef(new InteractionTracker());
   const imgRef = useRef<HTMLImageElement>(null);
+  const timingValidatorRef = useRef<TimingValidator | null>(null);
   const [imageDimensions, setImageDimensions] = useState({
     width: 0,
     height: 0,
   });
-  const timingValidatorRef = useRef<TimingValidator | null>(null);
 
   // Initialize refs lazily to avoid creating instances on every render
 
@@ -110,13 +113,19 @@ export const useCaptchaStepTwo = (
 
   /**
    * Check if a sector is selected
-   * Memoized to avoid recreating function on every render
+   * Uses obfuscated keys if mapping is available to prevent automation
    */
   const isSectorSelected = useCallback(
     (row: number, col: number): boolean => {
+      if (sectorKeyMapping) {
+        const simpleKey = `${row}-${col}`;
+        const obfuscatedKey = sectorKeyMapping.get(simpleKey);
+        return obfuscatedKey ? selectedSectors.has(obfuscatedKey) : false;
+      }
+      // Fallback to simple key if no mapping
       return selectedSectors.has(`${row}-${col}`);
     },
-    [selectedSectors]
+    [selectedSectors, sectorKeyMapping]
   );
 
   /**
@@ -130,6 +139,37 @@ export const useCaptchaStepTwo = (
     });
     return map;
   }, [watermarks]);
+
+  /**
+   * Handle sector toggle with anti-automation checks
+   */
+  const handleSectorToggleWithProtection = useCallback(
+    (row: number, col: number, event: React.MouseEvent) => {
+      // Track mouse movement
+      interactionTrackerRef.current.recordMouseMove(
+        event.clientX,
+        event.clientY
+      );
+
+      // Validate timing
+      if (!timingValidatorRef.current?.canProceed()) {
+        return; // Too fast, ignore click
+      }
+
+      // Track click
+      interactionTrackerRef.current.recordClick();
+
+      // Check for suspicious patterns
+      if (interactionTrackerRef.current.isSuspicious()) {
+        console.warn('Suspicious interaction pattern detected');
+        // In production, you might want to block or flag this
+      }
+
+      // Proceed with toggle
+      onSectorToggle(row, col);
+    },
+    [onSectorToggle]
+  );
 
   const getWatermark = useCallback(
     (row: number, col: number): WatermarkSector | undefined => {
@@ -158,5 +198,6 @@ export const useCaptchaStepTwo = (
     imageDimensions,
     imgRef,
     handleImageLoad,
+    handleSectorToggleWithProtection,
   };
 };
