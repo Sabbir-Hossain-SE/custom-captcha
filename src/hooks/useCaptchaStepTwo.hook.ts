@@ -42,8 +42,8 @@ export const useCaptchaStepTwo = (
       const img = new Image();
       img.onload = () => {
         setOriginalImageDimensions({
-          width: img.width || 640,
-          height: img.height || 480,
+          width: img.width,
+          height: img.height,
         });
       };
       img.src = capturedImage.imageData;
@@ -71,14 +71,14 @@ export const useCaptchaStepTwo = (
     const sectorSize = size / gridSize;
 
     // Use cached original dimensions or fallback
-    const originalWidth = originalImageDimensions?.width || 640;
-    const originalHeight = originalImageDimensions?.height || 480;
+    const originalWidth = originalImageDimensions?.width;
+    const originalHeight = originalImageDimensions?.height;
 
     // Calculate scale factor (avoid division by zero)
     const scaleX =
-      originalWidth > 0 ? imageDimensions.width / originalWidth : 1;
+      originalWidth! > 0 ? imageDimensions.width / originalWidth! : 1;
     const scaleY =
-      originalHeight > 0 ? imageDimensions.height / originalHeight : 1;
+      originalHeight! > 0 ? imageDimensions.height / originalHeight! : 1;
 
     return {
       startX: x * scaleX,

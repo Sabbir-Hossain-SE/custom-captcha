@@ -64,9 +64,8 @@ export const useCaptchaStepOne = (
       const video = videoRef.current;
       if (!video && !forceFallback) return;
 
-      let videoWidth = 640;
-      let videoHeight = 480;
-
+      let videoWidth = 608;
+      let videoHeight = 456;
       if (video && !forceFallback) {
         const actualWidth = video.videoWidth;
         const actualHeight = video.videoHeight;
@@ -100,8 +99,8 @@ export const useCaptchaStepOne = (
         const stream = await navigator.mediaDevices.getUserMedia({
           video: {
             facingMode: 'user',
-            width: { ideal: 640 },
-            height: { ideal: 480 },
+            width: { ideal: 608 },
+            height: { ideal: 456 },
           },
         });
 
@@ -230,8 +229,8 @@ export const useCaptchaStepOne = (
       if (!video) return;
 
       if (now - lastUpdateTime >= updateInterval) {
-        const videoWidth = video.videoWidth || 640;
-        const videoHeight = video.videoHeight || 480;
+        const videoWidth = video.videoWidth;
+        const videoHeight = video.videoHeight;
         const currentSize = squarePositionRef.current.size;
 
         const newPos = getRandomPosition(videoWidth, videoHeight, currentSize);
@@ -295,8 +294,8 @@ export const useCaptchaStepOne = (
     }
 
     // Set canvas size to match video
-    const videoWidth = video.videoWidth || 640;
-    const videoHeight = video.videoHeight || 480;
+    const videoWidth = video.videoWidth;
+    const videoHeight = video.videoHeight;
     canvas.width = videoWidth;
     canvas.height = videoHeight;
 

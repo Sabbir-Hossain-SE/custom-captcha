@@ -62,7 +62,7 @@ export const CaptchaStepOne: React.FC<CaptchaStepOneProps> = memo(
               autoPlay
               playsInline
               muted
-              className="w-full h-auto"
+              className="!w-[608px] !h-[456px]"
               style={{ display: 'block' }}
             />
 
