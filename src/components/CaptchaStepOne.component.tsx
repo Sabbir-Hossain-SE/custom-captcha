@@ -15,6 +15,7 @@ export const CaptchaStepOne: React.FC<CaptchaStepOneProps> = memo(
       isCapturing,
       error,
       isInitializing,
+      isVideoPlaying,
       handleContinue,
     } = useCaptchaStepOne(onCapture);
     if (error) {
@@ -66,17 +67,29 @@ export const CaptchaStepOne: React.FC<CaptchaStepOneProps> = memo(
               style={{ display: 'block' }}
             />
 
+            {/* Loading overlay - shows until video is actually playing */}
+            {!isVideoPlaying && (
+              <div className="absolute inset-0 bg-black bg-opacity-75 flex items-center justify-center z-10">
+                <div className="text-white text-center">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
+                  <p>Starting camera...</p>
+                </div>
+              </div>
+            )}
+
             {/* Moving square overlay */}
-            <div
-              className="absolute border-2 border-white pointer-events-none"
-              style={{
-                left: `${squarePosition.x}px`,
-                top: `${squarePosition.y}px`,
-                width: `${squarePosition.size}px`,
-                height: `${squarePosition.size}px`,
-                boxShadow: '0 0 0 2px rgba(0, 0, 0, 0.5)',
-              }}
-            />
+            {isVideoPlaying && (
+              <div
+                className="absolute border-2 border-white pointer-events-none z-20"
+                style={{
+                  left: `${squarePosition.x}px`,
+                  top: `${squarePosition.y}px`,
+                  width: `${squarePosition.size}px`,
+                  height: `${squarePosition.size}px`,
+                  boxShadow: '0 0 0 2px rgba(0, 0, 0, 0.5)',
+                }}
+              />
+            )}
           </div>
 
           {/* Continue button */}

@@ -24,6 +24,8 @@ export const useCaptchaStepOne = (
   const [isCapturing, setIsCapturing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isInitializing, setIsInitializing] = useState(true);
+  const [isVideoPlaying, setIsVideoPlaying] = useState(false);
+  const isVideoPlayingRef = useRef(false);
 
   // Memoize onCapture to prevent unnecessary re-renders
   const onCaptureRef = useRef(onCapture);
@@ -35,6 +37,12 @@ export const useCaptchaStepOne = (
    * Initialize camera stream
    */
   useEffect(() => {
+    // Reset initialization refs when effect runs
+    // This is critical for proper initialization without StrictMode
+    // State will be updated by the initialization process itself
+    isInitializingRef.current = true;
+    isInitializedRef.current = false;
+
     let timeoutId: number | null = null;
     let pollInterval: number | null = null;
     let safetyTimeoutId: number | null = null;
@@ -87,7 +95,10 @@ export const useCaptchaStepOne = (
       // Batch state updates
       squarePositionRef.current = newPosition;
       setSquarePosition(newPosition);
-      setIsInitializing(false);
+      // Only hide loading once video is actually playing
+      if (isVideoPlayingRef.current || forceFallback) {
+        setIsInitializing(false);
+      }
       isInitializingRef.current = false;
       isInitializedRef.current = true;
 
@@ -104,8 +115,26 @@ export const useCaptchaStepOne = (
           },
         });
 
-        const video = videoRef.current;
+        // Wait a bit for video element to be available (handles case without StrictMode)
+        // Without StrictMode, the effect might run before the video element is mounted
+        let video = videoRef.current;
+        let attempts = 0;
+        while (!video && attempts < 20) {
+          // Wait longer - up to 2 seconds for video element
+          await new Promise((resolve) => setTimeout(resolve, 100));
+          video = videoRef.current;
+          attempts++;
+        }
         if (!video) {
+          // Video element not available after waiting, use fallback
+          console.warn('Video element not found, using fallback dimensions');
+          initializeVideo(true);
+          return;
+        }
+
+        // Ensure video element is ready
+        if (!video.isConnected) {
+          console.warn('Video element not connected to DOM, using fallback');
           initializeVideo(true);
           return;
         }
@@ -115,19 +144,62 @@ export const useCaptchaStepOne = (
 
         // Single handler for all video events
         const handleVideoReady = () => {
-          if (!isInitializedRef.current) {
-            initializeVideo();
+          if (!isInitializedRef.current && video) {
+            // Double-check video has dimensions before initializing
+            if (video.videoWidth > 0 && video.videoHeight > 0) {
+              initializeVideo();
+            }
           }
         };
 
+        // Handler specifically for when video starts playing
+        const handleVideoPlaying = () => {
+          isVideoPlayingRef.current = true;
+          setIsVideoPlaying(true);
+          if (!isInitializedRef.current && video) {
+            if (video.videoWidth > 0 && video.videoHeight > 0) {
+              initializeVideo();
+            }
+          }
+        };
+
+        // Attach event handlers before playing
         video.onloadedmetadata = handleVideoReady;
         video.oncanplay = handleVideoReady;
         video.onloadeddata = handleVideoReady;
-        video.onplaying = handleVideoReady;
+        video.onplaying = handleVideoPlaying;
 
-        video.play().catch((err) => {
-          console.warn('Video play error:', err);
-        });
+        // Start playing video immediately to reduce black screen time
+        const playPromise = video.play();
+        if (playPromise !== undefined) {
+          playPromise
+            .then(() => {
+              // Video is playing
+              isVideoPlayingRef.current = true;
+              setIsVideoPlaying(true);
+              // Check if we can initialize
+              if (
+                !isInitializedRef.current &&
+                video.videoWidth > 0 &&
+                video.videoHeight > 0
+              ) {
+                initializeVideo();
+              }
+            })
+            .catch((err) => {
+              console.warn('Video play error:', err);
+              // Even if play fails, try to initialize with fallback after delay
+              setTimeout(() => {
+                if (!isInitializedRef.current) {
+                  initializeVideo(true);
+                }
+              }, 500);
+            });
+        } else {
+          // For browsers that don't return a promise
+          isVideoPlayingRef.current = true;
+          setIsVideoPlaying(true);
+        }
 
         // Polling mechanism - check every 100ms
         pollInterval = window.setInterval(() => {
@@ -143,6 +215,11 @@ export const useCaptchaStepOne = (
         // Quick timeout - proceed after 800ms
         timeoutId = window.setTimeout(() => {
           if (!isInitializedRef.current) {
+            // If video hasn't started playing, mark it as playing anyway to hide loading
+            if (!isVideoPlayingRef.current) {
+              isVideoPlayingRef.current = true;
+              setIsVideoPlaying(true);
+            }
             initializeVideo(true);
           }
         }, 800);
@@ -185,6 +262,11 @@ export const useCaptchaStepOne = (
     // GUARANTEED safety timeout - always ends loading after 2 seconds
     safetyTimeoutId = window.setTimeout(() => {
       if (isInitializingRef.current && !isInitializedRef.current) {
+        // Ensure video playing state is set to hide loading overlay
+        if (!isVideoPlayingRef.current) {
+          isVideoPlayingRef.current = true;
+          setIsVideoPlaying(true);
+        }
         initializeVideo(true);
       }
     }, 2000);
@@ -202,6 +284,9 @@ export const useCaptchaStepOne = (
         cancelAnimationFrame(animationFrameRef.current);
         animationFrameRef.current = null;
       }
+      // Reset refs to allow re-initialization if component remounts
+      isInitializingRef.current = true;
+      isInitializedRef.current = false;
     };
   }, []);
 
@@ -336,6 +421,7 @@ export const useCaptchaStepOne = (
     isCapturing,
     error,
     isInitializing,
+    isVideoPlaying,
     handleContinue,
   };
 };
